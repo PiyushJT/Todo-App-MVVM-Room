@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -45,6 +43,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.piyushjt.todo.ui.theme.Background
 import com.piyushjt.todo.ui.theme.CanceledText
 import com.piyushjt.todo.ui.theme.LightCanceledText
@@ -57,27 +58,26 @@ import com.piyushjt.todo.ui.theme.TodoTheme
 import com.piyushjt.todo.ui.theme.Transparent
 import com.piyushjt.todo.ui.theme.Typography
 import com.piyushjt.todo.ui.theme.White
+import kotlinx.serialization.Serializable
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            TodoTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize()
-                ) { innerPadding ->
-                    BG()
-                    Box(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Column {
-                            Header(innerPadding)
-                            MyTodoList()
+            TodoTheme() {
+                val navController = rememberNavController()
+                NavHost(
+                    navController = navController,
+                    startDestination = MainScreen
+                ) {
+                    composable<MainScreen> {
+                        MainScreen { navController.navigate(AddTodoScreen) }
+                    }
+                    composable<AddTodoScreen> {
+                        AddTodo {
+                            navController.navigate(MainScreen) // save todo and finish
                         }
-                        BottomButton(
-                            modifier = Modifier.align(Alignment.BottomCenter)
-                        )
                     }
 
                 }
@@ -86,9 +86,49 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Serializable
+object MainScreen
+
+@Serializable
+object AddTodoScreen
+
 val inter = FontFamily(
     Font(R.font.inter, FontWeight.SemiBold)
 )
+
+@Composable
+fun MainScreen(onBottomButtonClick: () -> Unit) {
+    BG()
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column {
+            Header()
+            MyTodoList()
+        }
+        BottomButton(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onBottomButtonClick
+        )
+    }
+}
+
+@Composable
+fun AddTodo(onBottomButtonClick: () -> Unit) {
+    BG()
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column {
+            Header()
+            NewTask()
+        }
+        BottomButton(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onClick = onBottomButtonClick
+        )
+    }
+}
 
 @Composable
 fun TaskList(
@@ -191,7 +231,8 @@ fun TaskList(
 
 @Composable
 fun BottomButton(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
     Column(
         modifier = modifier
@@ -202,7 +243,7 @@ fun BottomButton(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Button(
-            onClick = { },
+            onClick = onClick,
             modifier = modifier
                 .fillMaxWidth(0.9f)
                 .aspectRatio(6.392857f)
@@ -257,7 +298,6 @@ fun MyTodoList(
                 Todo(
                     "Run", "5 Km", false
                 ),
-
                 Todo(
                     "Go to Party", null, false
                 ),
@@ -358,6 +398,7 @@ fun NewTask(
 
 @Composable
 fun BG(modifier: Modifier = Modifier) {
+    Box(modifier = Modifier.background(Background).fillMaxSize())
     Image(
         painter = painterResource(id = R.drawable.header),
         contentDescription = "Background Image",
@@ -369,11 +410,10 @@ fun BG(modifier: Modifier = Modifier) {
 
 @Composable
 fun Header(
-    paddingValues: PaddingValues
 ) {
     Row(
         modifier = Modifier
-            .padding(paddingValues)
+            .padding(top = 50.dp)
             .padding(10.dp)
             .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -415,24 +455,19 @@ fun CircularButton(
 
 @Preview(showBackground = true)
 @Composable
-fun MainScreen() {
+fun MainScreenPrev() {
     TodoTheme {
-        Scaffold(
-            modifier = Modifier.fillMaxSize()
-        ) { innerPadding ->
-            BG()
-            Box(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Column {
-                    Header(innerPadding)
-                    MyTodoList()
-                }
-                BottomButton(
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
+        val navController = rememberNavController()
+        NavHost(
+            navController = navController,
+            startDestination = MainScreen
+        ) {
+            composable<MainScreen> {
+                MainScreen { navController.navigate(AddTodoScreen) }
             }
-
+            composable<AddTodoScreen> {
+                AddTodo { navController.navigate(MainScreen) }
+            }
         }
     }
 }
