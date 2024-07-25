@@ -2,6 +2,7 @@ package com.piyushjt.todo
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -12,11 +13,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -66,6 +71,14 @@ import com.piyushjt.todo.ui.theme.White
 import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
 
@@ -92,6 +105,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.isAppearanceLightStatusBars = false
+        Background.toArgb().also { window.navigationBarColor = it }
+
         setContent {
             TodoTheme() {
 
@@ -223,7 +242,8 @@ fun TaskList(
         modifier = Modifier
             .padding(top = 20.dp)
             .fillMaxWidth(0.9f)
-            .aspectRatio(4.475f / state.todos.size)
+            .fillMaxHeight(0.8f)
+            .shadow(6.dp, RoundedCornerShape(16.dp))
             .background(Transparent), shape = RoundedCornerShape(16.dp)
     ) {
 
@@ -231,7 +251,8 @@ fun TaskList(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(White),
+                .background(White)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
@@ -347,32 +368,36 @@ fun BottomButton(
     navigate : () -> Unit,
     text : String
 ) {
-    // Container to arrange the button to center
+    val navigationBarsPadding = if(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().value <= 16){
+        0.dp
+    } else {
+        (WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().value.toInt() -16).dp
+    }
+    Log.d("padding", navigationBarsPadding.toString())
+
     Column(
         modifier = modifier
+            .padding(bottom = navigationBarsPadding)
             .fillMaxWidth()
             .aspectRatio(4.25f)
             .background(Background),
-        verticalArrangement = Arrangement.SpaceAround,
+        verticalArrangement = Arrangement.SpaceEvenly,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
-        // The Button
         Button(
             onClick = {
-                if (text == "Save"){
+                if (text == "Save") {
                     onEvent(TodoEvent.SaveTodo)
                     onEvent(TodoEvent.HideAddTodo)
                     navigate()
-                }else {
+                } else {
                     onEvent(TodoEvent.ShowAddTodo)
                     navigate()
                 }
             },
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .aspectRatio(6.392857f)
-                .background(Transparent),
+                .aspectRatio(6.392857f),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Purple
             ),
@@ -382,6 +407,7 @@ fun BottomButton(
                 text = text,
                 style = Typography.titleMedium,
                 fontFamily = inter,
+                color = White,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -399,8 +425,7 @@ fun MyTodoList(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Transparent)
-            .verticalScroll(rememberScrollState()),
+            .background(Transparent),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
@@ -410,6 +435,7 @@ fun MyTodoList(
             text = "My Todo List",
             style = Typography.titleLarge,
             fontFamily = inter,
+            color = White,
             fontWeight = FontWeight.SemiBold
         )
 
@@ -541,6 +567,7 @@ fun Header(
             text = text,
             style = Typography.titleMedium,
             fontFamily = inter,
+            color = White,
             fontWeight = FontWeight.SemiBold
         )
 
