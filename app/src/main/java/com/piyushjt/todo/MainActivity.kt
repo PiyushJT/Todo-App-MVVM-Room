@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,12 +43,14 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.room.Room
 import com.piyushjt.todo.ui.theme.Background
 import com.piyushjt.todo.ui.theme.CanceledText
 import com.piyushjt.todo.ui.theme.LightCanceledText
@@ -59,31 +64,68 @@ import com.piyushjt.todo.ui.theme.Transparent
 import com.piyushjt.todo.ui.theme.Typography
 import com.piyushjt.todo.ui.theme.White
 import kotlinx.serialization.Serializable
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
+
+    // Initializing Database
+    private val db by lazy {
+        Room.databaseBuilder(
+            applicationContext,
+            TodoDatabase::class.java,
+            "todos.db"
+        ).build()
+    }
+
+    // Defining ViewModel and dao
+    private val viewModel by viewModels<TodoViewModel>(
+        factoryProducer = {
+            object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return TodoViewModel(db.dao) as T
+                }
+            }
+        }
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             TodoTheme() {
+
+                // Todo State
+                val state by viewModel.state.collectAsState()
+
+                // Navigation (Main Screen and Add a Todo Screen)
                 val navController = rememberNavController()
                 NavHost(
                     navController = navController,
                     startDestination = MainScreen
                 ) {
+                    // Main Screen
                     composable<MainScreen> {
-                        MainScreen { navController.navigate(AddTodoScreen) }
+                        MainScreen(state = state, onEvent = viewModel::onEvent, navigate = {
+                            navController.navigate(AddTodoScreen)
+                        })
                     }
+                    // Add a Todo Screen
                     composable<AddTodoScreen> {
-                        AddTodo {
-                            navController.navigate(MainScreen) // save todo and finish
-                        }
+                        AddTodo(state = state, onEvent = viewModel::onEvent, navigate = {
+                            navController.navigate(MainScreen) {
+                                popUpTo(AddTodoScreen) {
+                                    inclusive = true
+                                }
+                            }
+                        })
                     }
 
                 }
             }
         }
     }
+
 }
 
 @Serializable
@@ -92,62 +134,111 @@ object MainScreen
 @Serializable
 object AddTodoScreen
 
+
+// Declaring an external font family
 val inter = FontFamily(
     Font(R.font.inter, FontWeight.SemiBold)
 )
 
+
+// Main Screen Composable
 @Composable
-fun MainScreen(onBottomButtonClick: () -> Unit) {
+fun MainScreen(
+    state: TodoState,
+    onEvent: (TodoEvent) -> Unit,
+    navigate: () -> Unit
+) {
     BG()
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
         Column {
-            Header()
-            MyTodoList()
+            // Current Date
+            Header(SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(java.util.Date()))
+
+            // Todo List
+            MyTodoList(
+                state = state,
+                onEvent = onEvent
+            )
+
         }
+
+        // Button to add a new Todo
         BottomButton(
             modifier = Modifier.align(Alignment.BottomCenter),
-            onBottomButtonClick
+            onEvent,
+            navigate,
+            "Add New Task"
         )
+
     }
 }
 
+
+// Add Todo Screen Composable
 @Composable
-fun AddTodo(onBottomButtonClick: () -> Unit) {
+fun AddTodo(
+    state: TodoState,
+    onEvent: (TodoEvent) -> Unit,
+    navigate: () -> Unit
+) {
     BG()
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
         Column {
-            Header()
-            NewTask()
+
+            Header("Add New Task")
+
+            // New Task Input Fields
+            NewTask(
+                state= state,
+                onEvent = onEvent
+            )
+
         }
+
+        // Button to save the Todo
         BottomButton(
             modifier = Modifier.align(Alignment.BottomCenter),
-            onClick = onBottomButtonClick
+            onEvent,
+            navigate,
+            "Save"
         )
+
     }
 }
 
+
+// List of All Todos
 @Composable
 fun TaskList(
-    tasks: List<Todo>
+    state: TodoState,
+    onEvent: (TodoEvent) -> Unit
 ) {
+
+    // Curved Cornered White Card
     Card(
         modifier = Modifier
             .padding(top = 20.dp)
             .fillMaxWidth(0.9f)
-            .aspectRatio(4.475f / tasks.size)
+            .aspectRatio(4.475f / state.todos.size)
             .background(Transparent), shape = RoundedCornerShape(16.dp)
     ) {
+
+        // Container to arrange all todos
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(White),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            for (task in tasks) {
+
+            // Loop to show all Todos
+            for (todo in state.todos) {
+
+                // Column to show divider line if needed
                 Column(
                     modifier = Modifier
                         .padding(horizontal = 20.dp, vertical = 4.dp)
@@ -155,7 +246,9 @@ fun TaskList(
                         .aspectRatio(4.475f),
                 ) {
 
-                    if (tasks[0] != task) {
+                    // Show divider line for all todos after first todo
+                    if (state.todos[0] != todo) {
+                        // The line
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -164,15 +257,23 @@ fun TaskList(
                         )
                     }
 
+                    // Row of Todo-text and CheckBox
                     Row(
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.Absolute.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+
+                        // Column of Title and Description
                         Column {
-                            if (task.isChecked) {
+
+                            // Modifying text styles for checked and unchecked todos
+                            // . For Checked
+                            if (todo.isChecked) {
+
+                                // if the todo is checked -> cut the text with line through
                                 Text(
-                                    text = task.title,
+                                    text = todo.title,
                                     style = Typography.titleLarge,
                                     color = CanceledText,
                                     fontFamily = inter,
@@ -180,9 +281,9 @@ fun TaskList(
                                     fontWeight = FontWeight.SemiBold,
                                     textDecoration = TextDecoration.LineThrough
                                 )
-                                task.description?.let {
+                                if(!todo.description.isNullOrEmpty()){
                                     Text(
-                                        text = it,
+                                        text = todo.description,
                                         style = Typography.titleMedium,
                                         color = LightCanceledText,
                                         fontFamily = inter,
@@ -191,31 +292,39 @@ fun TaskList(
                                         textDecoration = TextDecoration.LineThrough
                                     )
                                 }
-                            } else {
+                            }
+                            // . For Unchecked
+                            else {
                                 Text(
-                                    text = task.title,
+                                    text = todo.title,
                                     style = Typography.titleLarge,
                                     color = TextColor,
                                     fontFamily = inter,
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                task.description?.let {
+                                if(!todo.description.isNullOrEmpty()){
                                     Text(
-                                        text = it,
+                                        text = todo.description,
                                         style = Typography.titleMedium,
                                         color = LightText,
                                         fontFamily = inter,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
-
                                 }
                             }
-
                         }
+
+                        // Checkbox to show completion status
                         Checkbox(
-                            checked = task.isChecked, onCheckedChange = {},
+                            checked = todo.isChecked,
+
+                            // Change completion status
+                            onCheckedChange = { isChecked ->
+                                onEvent(TodoEvent.SetChecked(todo, isChecked))
+                            },
+
                             colors = CheckboxDefaults.colors(
                                 checkedColor = Purple,
                                 uncheckedColor = Purple,
@@ -229,11 +338,16 @@ fun TaskList(
     }
 }
 
+
+// Bottom Button Composable
 @Composable
 fun BottomButton(
     modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onEvent: (TodoEvent) -> Unit,
+    navigate : () -> Unit,
+    text : String
 ) {
+    // Container to arrange the button to center
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -242,8 +356,19 @@ fun BottomButton(
         verticalArrangement = Arrangement.SpaceAround,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
+        // The Button
         Button(
-            onClick = onClick,
+            onClick = {
+                if (text == "Save"){
+                    onEvent(TodoEvent.SaveTodo)
+                    onEvent(TodoEvent.HideAddTodo)
+                    navigate()
+                }else {
+                    onEvent(TodoEvent.ShowAddTodo)
+                    navigate()
+                }
+            },
             modifier = modifier
                 .fillMaxWidth(0.9f)
                 .aspectRatio(6.392857f)
@@ -254,20 +379,22 @@ fun BottomButton(
             shape = RoundedCornerShape(50.dp)
         ) {
             Text(
-                text = "Add New Task",
+                text = text,
                 style = Typography.titleMedium,
                 fontFamily = inter,
                 fontWeight = FontWeight.SemiBold
             )
         }
     }
-
 }
 
+// List of all Todos
 @SuppressLint("Range")
 @Composable
 fun MyTodoList(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    state: TodoState,
+    onEvent: (TodoEvent) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -276,6 +403,8 @@ fun MyTodoList(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
+        // Heading
         Text(
             modifier = Modifier.padding(top = 16.dp),
             text = "My Todo List",
@@ -284,49 +413,21 @@ fun MyTodoList(
             fontWeight = FontWeight.SemiBold
         )
 
+        // The card of all todos
         TaskList(
-            tasks = listOf(
-                Todo(
-                    "Study", "8.5 Hrs", true
-                ),
-                Todo(
-                    "Run", "5 Km", false
-                ),
-                Todo(
-                    "Study", "8.5 Hrs", true
-                ),
-                Todo(
-                    "Run", "5 Km", false
-                ),
-                Todo(
-                    "Go to Party", null, false
-                ),
-                Todo(
-                    "Study", "8.5 Hrs", true
-                ),
-                Todo(
-                    "Run", "5 Km", false
-                ),
-                Todo(
-                    "Go to Party", null, false
-                ),
-                Todo(
-                    "Study", "8.5 Hrs", true
-                ),
-                Todo(
-                    "Go to Party", null, false
-                ),
-
-                )
+            state = state,
+            onEvent = onEvent
         )
-
-
     }
 }
 
+
+// New todo composable
 @Composable
 fun NewTask(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    state: TodoState,
+    onEvent: (TodoEvent) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -335,6 +436,8 @@ fun NewTask(
             .background(Background)
             .padding(20.dp)
     ) {
+
+        // Todo title TextField
         Text(
             text = "Task Title",
             style = Typography.titleMedium,
@@ -344,8 +447,10 @@ fun NewTask(
             modifier = Modifier.padding(top = 28.dp)
         )
 
-        OutlinedTextField(value = "",
-            onValueChange = {},
+        OutlinedTextField(value = state.title,
+            onValueChange = {
+                onEvent(TodoEvent.SetTitle(it))
+            },
             modifier = Modifier
                 .padding(top = 8.dp)
                 .fillMaxWidth(),
@@ -364,6 +469,8 @@ fun NewTask(
                 Text(text = "Task Title")
             })
 
+
+        // Todo description TextField
         Text(
             text = "Task Description",
             style = Typography.titleMedium,
@@ -373,8 +480,10 @@ fun NewTask(
             modifier = Modifier.padding(top = 28.dp)
         )
 
-        OutlinedTextField(value = "",
-            onValueChange = {},
+        OutlinedTextField(value = state.description,
+            onValueChange = {
+                onEvent(TodoEvent.SetDescription(it))
+            },
             modifier = Modifier
                 .padding(top = 8.dp)
                 .fillMaxWidth(),
@@ -392,13 +501,18 @@ fun NewTask(
             placeholder = {
                 Text(text = "Task Description (Optional)")
             })
-
     }
 }
 
+
+// Background of the app (Top image and color)
 @Composable
 fun BG(modifier: Modifier = Modifier) {
-    Box(modifier = Modifier.background(Background).fillMaxSize())
+    Box(
+        modifier = Modifier
+            .background(Background)
+            .fillMaxSize()
+    )
     Image(
         painter = painterResource(id = R.drawable.header),
         contentDescription = "Background Image",
@@ -408,8 +522,11 @@ fun BG(modifier: Modifier = Modifier) {
     )
 }
 
+
+// Header of the app
 @Composable
 fun Header(
+    text: String
 ) {
     Row(
         modifier = Modifier
@@ -417,57 +534,15 @@ fun Header(
             .padding(10.dp)
             .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.Center
     ) {
-        CircularButton()
 
         Text(
-            text = "October 20, 2022",
+            text = text,
             style = Typography.titleMedium,
             fontFamily = inter,
             fontWeight = FontWeight.SemiBold
         )
 
-        CircularButton()
-
-    }
-}
-
-@Composable
-fun CircularButton(
-    image: Int? = null, bg: Color = Transparent
-) {
-    IconButton(
-        onClick = {},
-        modifier = Modifier
-            .width(50.dp)
-            .height(50.dp)
-            .background(bg, shape = CircleShape)
-    ) {
-        if (image != null) {
-            Icon(
-                painter = painterResource(id = image), contentDescription = "Back Button"
-            )
-        }
-    }
-}
-
-
-@Preview(showBackground = true)
-@Composable
-fun MainScreenPrev() {
-    TodoTheme {
-        val navController = rememberNavController()
-        NavHost(
-            navController = navController,
-            startDestination = MainScreen
-        ) {
-            composable<MainScreen> {
-                MainScreen { navController.navigate(AddTodoScreen) }
-            }
-            composable<AddTodoScreen> {
-                AddTodo { navController.navigate(MainScreen) }
-            }
-        }
     }
 }
