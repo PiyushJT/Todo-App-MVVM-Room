@@ -2,7 +2,6 @@ package com.piyushjt.todo
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,11 +19,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -32,8 +29,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -42,7 +37,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -50,14 +46,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.NavController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.room.Room
 import com.piyushjt.todo.ui.theme.Background
 import com.piyushjt.todo.ui.theme.CanceledText
+import com.piyushjt.todo.ui.theme.CrimsonRed
 import com.piyushjt.todo.ui.theme.LightCanceledText
 import com.piyushjt.todo.ui.theme.LightText
 import com.piyushjt.todo.ui.theme.Line
@@ -68,17 +70,8 @@ import com.piyushjt.todo.ui.theme.TodoTheme
 import com.piyushjt.todo.ui.theme.Transparent
 import com.piyushjt.todo.ui.theme.Typography
 import com.piyushjt.todo.ui.theme.White
-import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
 import java.util.Locale
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalDensity
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
 
@@ -106,10 +99,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Setting status bar & navigation bar colors
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.isAppearanceLightStatusBars = false
         Background.toArgb().also { window.navigationBarColor = it }
+
 
         setContent {
             TodoTheme() {
@@ -119,25 +114,35 @@ class MainActivity : ComponentActivity() {
 
                 // Navigation (Main Screen and Add a Todo Screen)
                 val navController = rememberNavController()
-                NavHost(
-                    navController = navController,
-                    startDestination = MainScreen
-                ) {
+
+                NavHost(navController = navController, startDestination = Screen.MainScreen.route) {
+
                     // Main Screen
-                    composable<MainScreen> {
-                        MainScreen(state = state, onEvent = viewModel::onEvent, navigate = {
-                            navController.navigate(AddTodoScreen)
-                        })
+                    composable(
+                        route = Screen.MainScreen.route
+                    ) {
+                        MainScreen(
+                            navController = navController,
+                            state = state,
+                            onEvent = viewModel::onEvent
+                        )
                     }
                     // Add a Todo Screen
-                    composable<AddTodoScreen> {
-                        AddTodo(state = state, onEvent = viewModel::onEvent, navigate = {
-                            navController.navigate(MainScreen) {
-                                popUpTo(AddTodoScreen) {
-                                    inclusive = true
-                                }
+                    composable(
+                        route = Screen.AddTodoScreen.route + "/{id}",
+                        arguments = listOf(
+                            navArgument("id"){
+                                type = NavType.IntType
+                                defaultValue = -1
                             }
-                        })
+                        )
+                    ) { entry ->
+                        AddTodoScreen(
+                            id = entry.arguments?.getInt("id") ?: -1, // using -1 at null
+                            state = state,
+                            onEvent = viewModel::onEvent,
+                            navController = navController
+                        )
                     }
 
                 }
@@ -146,12 +151,6 @@ class MainActivity : ComponentActivity() {
     }
 
 }
-
-@Serializable
-object MainScreen
-
-@Serializable
-object AddTodoScreen
 
 
 // Declaring an external font family
@@ -165,7 +164,7 @@ val inter = FontFamily(
 fun MainScreen(
     state: TodoState,
     onEvent: (TodoEvent) -> Unit,
-    navigate: () -> Unit
+    navController: NavController,
 ) {
     BG()
     Box(
@@ -186,9 +185,10 @@ fun MainScreen(
         // Button to add a new Todo
         BottomButton(
             modifier = Modifier.align(Alignment.BottomCenter),
-            onEvent,
-            navigate,
-            "Add New Task"
+            onEvent = onEvent,
+            text = "Add New Task",
+            navController = navController,
+            id = -1
         )
 
     }
@@ -197,10 +197,11 @@ fun MainScreen(
 
 // Add Todo Screen Composable
 @Composable
-fun AddTodo(
+fun AddTodoScreen(
     state: TodoState,
     onEvent: (TodoEvent) -> Unit,
-    navigate: () -> Unit
+    navController: NavController,
+    id : Int
 ) {
     BG()
     Box(
@@ -221,9 +222,10 @@ fun AddTodo(
         // Button to save the Todo
         BottomButton(
             modifier = Modifier.align(Alignment.BottomCenter),
-            onEvent,
-            navigate,
-            "Save"
+            onEvent = onEvent,
+            text = "Save",
+            navController = navController,
+            id = id
         )
 
     }
@@ -240,7 +242,7 @@ fun TaskList(
     // Curved Cornered White Card
     Card(
         modifier = Modifier
-            .padding(top = 20.dp)
+            .padding(top = 14.dp)
             .fillMaxWidth(0.9f)
             .fillMaxHeight(0.8f)
             .shadow(6.dp, RoundedCornerShape(16.dp))
@@ -365,34 +367,59 @@ fun TaskList(
 fun BottomButton(
     modifier: Modifier = Modifier,
     onEvent: (TodoEvent) -> Unit,
-    navigate : () -> Unit,
+    id : Int,
+    navController : NavController,
     text : String
 ) {
-    val navigationBarsPadding = if(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().value <= 16){
-        0.dp
-    } else {
-        (WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().value.toInt() -16).dp
-    }
-    Log.d("padding", navigationBarsPadding.toString())
 
     Column(
         modifier = modifier
-            .padding(bottom = navigationBarsPadding)
+            .padding(
+                bottom = WindowInsets.navigationBars
+                    .asPaddingValues()
+                    .calculateBottomPadding()
+            )
             .fillMaxWidth()
-            .aspectRatio(4.25f)
             .background(Background),
-        verticalArrangement = Arrangement.SpaceEvenly,
+        verticalArrangement = Arrangement.Bottom,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
+        if(id != -1){
+            Button(
+                onClick = {
+
+                },
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(bottom = 16.dp)
+                    .aspectRatio(6.392857f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CrimsonRed
+                ),
+                shape = RoundedCornerShape(50.dp)
+            ) {
+                Text(
+                    text = "Delete Todo",
+                    style = Typography.titleMedium,
+                    fontFamily = inter,
+                    color = White,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
         Button(
             onClick = {
                 if (text == "Save") {
                     onEvent(TodoEvent.SaveTodo)
                     onEvent(TodoEvent.HideAddTodo)
-                    navigate()
+                    navController.navigate(Screen.MainScreen.route) {
+                        popUpTo(Screen.MainScreen.route) { inclusive = true }
+                    }
                 } else {
                     onEvent(TodoEvent.ShowAddTodo)
-                    navigate()
+                    navController.navigate(Screen.AddTodoScreen.withargs(-1))
                 }
             },
             modifier = Modifier
@@ -556,8 +583,7 @@ fun Header(
 ) {
     Row(
         modifier = Modifier
-            .padding(top = 50.dp)
-            .padding(10.dp)
+            .padding(top = 30.dp, bottom = 10.dp)
             .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
