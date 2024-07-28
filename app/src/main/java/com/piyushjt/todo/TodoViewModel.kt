@@ -53,28 +53,44 @@ class TodoViewModel(
                 }
             }
 
-            // Save a Task
+            // Save or Update a Task
             is TodoEvent.SaveTodo -> {
                 val title = state.value.title
                 val description = state.value.description
                 val isChecked = state.value.isChecked
+                val id = state.value.id
 
                 if (title.isBlank()) {
                     return
                 }
 
-                val todo = Todo(
+                val updateTodo = Todo(
+                    id = id,
                     title = title,
                     description = description,
                     isChecked = isChecked
                 )
 
-                viewModelScope.launch {
-                    dao.upsertTodo(todo)
+                val newTodo = Todo(
+                    title = title,
+                    description = description,
+                    isChecked = isChecked
+                )
+
+                if (updateTodo.id != -1) {
+                    viewModelScope.launch {
+                        dao.upsertTodo(updateTodo)
+                    }
+                }
+                else {
+                    viewModelScope.launch {
+                        dao.upsertTodo(newTodo)
+                    }
                 }
 
                 _state.update {
                     it.copy(
+                        id = -1,
                         isAddingTodo = false,
                         title = "",
                         description = "",
@@ -88,6 +104,15 @@ class TodoViewModel(
                 _state.update {
                     it.copy(
                         title = event.title
+                    )
+                }
+            }
+
+            // Setting the Id
+            is TodoEvent.SetID -> {
+                _state.update {
+                    it.copy(
+                        id = event.id
                     )
                 }
             }

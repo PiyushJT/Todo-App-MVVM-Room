@@ -2,6 +2,7 @@ package com.piyushjt.todo
 
 sealed interface TodoEvent {
     data class SetTitle(val title: String) : TodoEvent
+    data class SetID(val id: Int) : TodoEvent
     data class SetDescription(val description: String) : TodoEvent
     data class SetChecked(val todo: Todo, val isChecked: Boolean) : TodoEvent
     object SaveTodo : TodoEvent

@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -164,7 +166,7 @@ val inter = FontFamily(
 fun MainScreen(
     state: TodoState,
     onEvent: (TodoEvent) -> Unit,
-    navController: NavController,
+    navController: NavController
 ) {
     BG()
     Box(
@@ -177,6 +179,7 @@ fun MainScreen(
             // Todo List
             MyTodoList(
                 state = state,
+                navController = navController,
                 onEvent = onEvent
             )
 
@@ -186,6 +189,7 @@ fun MainScreen(
         BottomButton(
             modifier = Modifier.align(Alignment.BottomCenter),
             onEvent = onEvent,
+            state = state,
             text = "Add New Task",
             navController = navController,
             id = -1
@@ -214,6 +218,7 @@ fun AddTodoScreen(
             // New Task Input Fields
             NewTask(
                 state= state,
+                id = id,
                 onEvent = onEvent
             )
 
@@ -223,6 +228,7 @@ fun AddTodoScreen(
         BottomButton(
             modifier = Modifier.align(Alignment.BottomCenter),
             onEvent = onEvent,
+            state = state,
             text = "Save",
             navController = navController,
             id = id
@@ -236,8 +242,15 @@ fun AddTodoScreen(
 @Composable
 fun TaskList(
     state: TodoState,
+    navController: NavController,
     onEvent: (TodoEvent) -> Unit
 ) {
+
+    // Change title and description back to nulls
+    LaunchedEffect("") {
+        onEvent(TodoEvent.SetTitle(""))
+        onEvent(TodoEvent.SetDescription(""))
+    }
 
     // Curved Cornered White Card
     Card(
@@ -246,7 +259,8 @@ fun TaskList(
             .fillMaxWidth(0.9f)
             .fillMaxHeight(0.8f)
             .shadow(6.dp, RoundedCornerShape(16.dp))
-            .background(Transparent), shape = RoundedCornerShape(16.dp)
+            .background(Transparent),
+        shape = RoundedCornerShape(16.dp)
     ) {
 
         // Container to arrange all todos
@@ -266,7 +280,13 @@ fun TaskList(
                     modifier = Modifier
                         .padding(horizontal = 20.dp, vertical = 4.dp)
                         .fillMaxWidth()
-                        .aspectRatio(4.475f),
+
+                        // Opening Add Todo Screen to update or delete
+                        .clickable {
+                            onEvent(TodoEvent.ShowAddTodo)
+                            navController.navigate(Screen.AddTodoScreen.withargs(todo.id))
+                        }
+                        .aspectRatio(4.475f)
                 ) {
 
                     // Show divider line for all todos after first todo
@@ -366,6 +386,7 @@ fun TaskList(
 @Composable
 fun BottomButton(
     modifier: Modifier = Modifier,
+    state: TodoState,
     onEvent: (TodoEvent) -> Unit,
     id : Int,
     navController : NavController,
@@ -375,9 +396,16 @@ fun BottomButton(
     Column(
         modifier = modifier
             .padding(
-                bottom = WindowInsets.navigationBars
-                    .asPaddingValues()
-                    .calculateBottomPadding()
+                bottom = if (WindowInsets.navigationBars
+                        .asPaddingValues()
+                        .calculateBottomPadding() == 0.dp
+                ) {
+                    16.dp
+                } else {
+                    WindowInsets.navigationBars
+                        .asPaddingValues()
+                        .calculateBottomPadding()
+                }
             )
             .fillMaxWidth()
             .background(Background),
@@ -388,7 +416,14 @@ fun BottomButton(
         if(id != -1){
             Button(
                 onClick = {
+                    // Deleting Todo
+                    onEvent(TodoEvent.DeleteTodo(todo = state.todos.find { it.id == id }!!))
+                    onEvent(TodoEvent.HideAddTodo)
 
+                    // Navigating back to main screen
+                    navController.navigate(Screen.MainScreen.route) {
+                        popUpTo(Screen.MainScreen.route) { inclusive = true }
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
@@ -411,15 +446,30 @@ fun BottomButton(
 
         Button(
             onClick = {
-                if (text == "Save") {
+
+                // Saving a new todo
+                if (id == -1) {
+                    if (text == "Save") {
+                        onEvent(TodoEvent.SaveTodo)
+
+                        onEvent(TodoEvent.HideAddTodo)
+                        navController.navigate(Screen.MainScreen.route) {
+                            popUpTo(Screen.MainScreen.route) { inclusive = true }
+                        }
+                    } else {
+                        onEvent(TodoEvent.ShowAddTodo)
+                        navController.navigate(Screen.AddTodoScreen.withargs(-1))
+                    }
+                }
+                // Updating an Existing todo
+                else {
+                    onEvent(TodoEvent.SetID(id))
+
                     onEvent(TodoEvent.SaveTodo)
                     onEvent(TodoEvent.HideAddTodo)
                     navController.navigate(Screen.MainScreen.route) {
                         popUpTo(Screen.MainScreen.route) { inclusive = true }
                     }
-                } else {
-                    onEvent(TodoEvent.ShowAddTodo)
-                    navController.navigate(Screen.AddTodoScreen.withargs(-1))
                 }
             },
             modifier = Modifier
@@ -447,6 +497,7 @@ fun BottomButton(
 fun MyTodoList(
     modifier: Modifier = Modifier,
     state: TodoState,
+    navController: NavController,
     onEvent: (TodoEvent) -> Unit
 ) {
     Column(
@@ -458,7 +509,7 @@ fun MyTodoList(
 
         // Heading
         Text(
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier,
             text = "My Todo List",
             style = Typography.titleLarge,
             fontFamily = inter,
@@ -469,6 +520,7 @@ fun MyTodoList(
         // The card of all todos
         TaskList(
             state = state,
+            navController = navController,
             onEvent = onEvent
         )
     }
@@ -480,8 +532,21 @@ fun MyTodoList(
 fun NewTask(
     modifier: Modifier = Modifier,
     state: TodoState,
+    id : Int,
     onEvent: (TodoEvent) -> Unit
 ) {
+
+    // Setting Values in State if user is updating the todo
+    LaunchedEffect(id) {
+        if (id != -1) {
+            val todo = state.todos.find { it.id == id }
+            if (todo != null) {
+                onEvent(TodoEvent.SetTitle(todo.title))
+                onEvent(TodoEvent.SetDescription(todo.description ?: ""))
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -583,7 +648,7 @@ fun Header(
 ) {
     Row(
         modifier = Modifier
-            .padding(top = 30.dp, bottom = 10.dp)
+            .padding(top = 50.dp, bottom = 10.dp)
             .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
